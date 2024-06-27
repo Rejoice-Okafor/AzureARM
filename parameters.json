@@ -1,0 +1,31 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "vmCount": {
+        "value": 5
+      },
+      "vmSize": {
+        "value": "Standard_DS1_v2"
+      },
+      "adminUsername": {
+        "value": "rejoice"
+      },
+      "adminPasswordOrKey": {
+        "value": "Mypasssohard100*"
+      },
+      "authenticationType": {
+        "value": "password"
+      },
+      "ubuntuOSVersion": {
+        "value": "Ubuntu-2004"
+      },
+      "securityType": {
+        "value": "Standard"
+      },
+      "vmName": {
+        "value": "myVM"
+      }
+    }
+  }
+  

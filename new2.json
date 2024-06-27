@@ -1,0 +1,276 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "vmCount": {
+        "type": "int",
+        "minValue": 1,
+        "defaultValue": 5,
+        "metadata": {
+          "description": "Number of VMs to deploy"
+        }
+      },
+      "vmSize": {
+        "type": "string",
+        "defaultValue": "Standard_DS1_v2",
+        "allowedValues": [
+          "Standard_DS1_v2",
+          "Standard_DS2_v2",
+          "Standard_DS3_v2"
+        ],
+        "metadata": {
+          "description": "VM Size"
+        }
+      },
+      "adminUsername": {
+        "type": "string",
+        "metadata": {
+          "description": "Admin username"
+        }
+      },
+      "adminPasswordOrKey": {
+        "type": "securestring",
+        "metadata": {
+          "description": "Admin password or SSH key"
+        }
+      },
+      "authenticationType": {
+        "type": "string",
+        "defaultValue": "password",
+        "allowedValues": [
+          "sshPublicKey",
+          "password"
+        ],
+        "metadata": {
+          "description": "Type of authentication to use on the Virtual Machine. SSH key is recommended."
+        }
+      },
+      "ubuntuOSVersion": {
+        "type": "string",
+        "defaultValue": "Ubuntu-2004",
+        "allowedValues": [
+          "Ubuntu-2004",
+          "Ubuntu-2204"
+        ],
+        "metadata": {
+          "description": "Ubuntu OS version to use."
+        }
+      },
+      "securityType": {
+        "type": "string",
+        "defaultValue": "Standard",
+        "allowedValues": [
+          "TrustedLaunch",
+          "Standard"
+        ],
+        "metadata": {
+          "description": "Security type for the VM"
+        }
+      },
+      "vmName": {
+        "type": "string",
+        "metadata": {
+          "description": "Base name for VMs"
+        }
+      },
+      "location": {
+        "type": "string",
+        "defaultValue": "West Europe",
+        "metadata": {
+          "description": "Location for all resources."
+        }
+      },
+      "dnsLabelPrefix": {
+        "type": "string",
+        "defaultValue": "[toLower(format('{0}-{1}', parameters('vmName'), uniqueString(resourceGroup().id)))]",
+        "metadata": {
+          "description": "Unique DNS Name for the Public IP used to access the Virtual Machine."
+        }
+      }
+    },
+    "variables": {
+      "vmNamePrefix": "[parameters('vmName')]",
+      "virtualNetworkName": "rejoiceVnet",
+      "nsgName1": "rejoice-nsg",
+      "subnetName": "rejoiceSubnet",
+      "subnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), variables('subnetName'))]",
+      "computeApiVersion": "2023-09-01",
+      "networkApiVersion": "2023-09-01",
+      "osDiskType": "Standard_LRS",
+      "networkInterfaceNamePrefix": "[concat(parameters('vmName'), 'NetInt')]",
+      "publicIPAddressPrefix": "[concat(parameters('vmName'), 'PublicIP')]",
+      "subnetAddressPrefix": "10.1.0.0/24",
+      "addressPrefix": "10.1.0.0/16",
+      "imageReference": {
+        "Ubuntu-2004": {
+          "publisher": "Canonical",
+          "offer": "0001-com-ubuntu-server-focal",
+          "sku": "20_04-lts-gen2",
+          "version": "latest"
+        },
+        "Ubuntu-2204": {
+          "publisher": "Canonical",
+          "offer": "0001-com-ubuntu-server-jammy",
+          "sku": "22_04-lts-gen2",
+          "version": "latest"
+        }
+      },
+      "linuxConfiguration": {
+        "disablePasswordAuthentication": true,
+        "ssh": {
+          "publicKeys": [
+            {
+              "path": "[format('/home/{0}/.ssh/authorized_keys', parameters('adminUsername'))]",
+              "keyData": "[parameters('adminPasswordOrKey')]"
+            }
+          ]
+        }
+      },
+      "securityProfileJson": {
+        "uefiSettings": {
+          "secureBootEnabled": true,
+          "vTpmEnabled": true
+        }
+      }
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Network/virtualNetworks",
+        "apiVersion": "[variables('networkApiVersion')]",
+        "name": "[variables('virtualNetworkName')]",
+        "location": "[parameters('location')]",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "[variables('addressPrefix')]"
+            ]
+          },
+          "subnets": [
+            {
+              "name": "[variables('subnetName')]",
+              "properties": {
+                "addressPrefix": "[variables('subnetAddressPrefix')]"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "apiVersion": "[variables('networkApiVersion')]",
+        "name": "[variables('nsgName1')]",
+        "location": "[parameters('location')]",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "default-allow-ssh",
+              "properties": {
+                "priority": 1000,
+                "sourceAddressPrefix": "*",
+                "protocol": "Tcp",
+                "destinationPortRange": "22",
+                "access": "Allow",
+                "direction": "Inbound",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "Microsoft.Network/networkInterfaces",
+        "apiVersion": "[variables('networkApiVersion')]",
+        "name": "[concat(variables('networkInterfaceNamePrefix'), copyIndex())]",
+        "location": "[parameters('location')]",
+        "copy": {
+          "name": "nicLoop",
+          "count": "[parameters('vmCount')]"
+        },
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "properties": {
+                "subnet": {
+                  "id": "[variables('subnetRef')]"
+                },
+                "privateIPAllocationMethod": "Dynamic",
+                "publicIPAddress": {
+                  "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(variables('publicIPAddressPrefix'), copyIndex()))]"
+                }
+              }
+            }
+          ],
+          "networkSecurityGroup": {
+            "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName1'))]"
+          }
+        }
+      },
+      {
+        "type": "Microsoft.Network/publicIPAddresses",
+        "apiVersion": "[variables('networkApiVersion')]",
+        "name": "[concat(variables('publicIPAddressPrefix'), copyIndex())]",
+        "location": "[parameters('location')]",
+        "sku": {
+          "name": "Basic"
+        },
+        "copy": {
+          "name": "pipLoop",
+          "count": "[parameters('vmCount')]"
+        },
+        "properties": {
+          "publicIPAllocationMethod": "Dynamic",
+          "publicIPAddressVersion": "IPv4",
+          "dnsSettings": {
+            "domainNameLabel": "[concat(parameters('dnsLabelPrefix'), copyIndex())]"
+          },
+          "idleTimeoutInMinutes": 4
+        }
+      },
+      {
+        "type": "Microsoft.Compute/virtualMachines",
+        "apiVersion": "[variables('computeApiVersion')]",
+        "name": "[concat(parameters('vmName'), copyIndex())]",
+        "location": "[parameters('location')]",
+        "copy": {
+          "name": "vmLoop",
+          "count": "[parameters('vmCount')]"
+        },
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "[parameters('vmSize')]"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "[variables('osDiskType')]"
+              }
+            },
+            "imageReference": "[variables('imageReference')[parameters('ubuntuOSVersion')]]"
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('networkInterfaceNamePrefix'), copyIndex()))]"
+              }
+            ]
+          },
+          "osProfile": {
+            "computerName": "[concat(parameters('vmName'), copyIndex())]",
+            "adminUsername": "[parameters('adminUsername')]",
+            "adminPassword": "[if(equals(parameters('authenticationType'), 'password'), parameters('adminPasswordOrKey'), null())]",
+            "linuxConfiguration": "[if(equals(parameters('authenticationType'), 'password'), null(), variables('linuxConfiguration'))]"
+          },
+          "securityProfile": "[if(equals(parameters('securityType'), 'TrustedLaunch'), variables('securityProfileJson'), null())]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('networkInterfaceNamePrefix'), copyIndex()))]",
+          "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName1'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]"
+        ]
+      }
+    ]
+  }
+  

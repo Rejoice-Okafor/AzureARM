@@ -1,0 +1,6 @@
+az deployment group create \
+  --name rejoicetemp \
+  --resource-group $resourceGroupName \
+  --template-file ./new2.json \
+  --parameters @parameters.json \
+  --verbose
