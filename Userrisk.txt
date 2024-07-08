@@ -1,0 +1,4 @@
+"AadClientId": "2f2df568-a4ca-4d3f-8ff8-7ba90806e7d7",
+  "AadSecret": "611e360f-28f4-4da4-8cbb-f49302b4b783",
+  "AadTenantDomain": "skt42.onmicrosoft.com",
+  "AadTenantId": "a7c71f24-9f5b-4215-8ac2-9c2e399824e1",
